@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 from images import makeDatabase, split
-from scikit-images import hog
 
 
 def findHOG(image):
@@ -52,11 +51,19 @@ def imageProcessing(final_img, img):
     hull = cv2.convexHull(max_contour)
 
     # draw the contours
+    drawing = np.zeros(img.shape, np.uint8)
     cv2.drawContours(drawing, [hull], 0, (0, 0, 255), 0)
+    cv2.drawContours(drawing, [max_contour], 0, (0, 0, 255), 0)
 
     # find the defects
     hull = cv2.convexHull(max_contour, returnPoints=False)
-    return cv2.boundingRect(max_contour)
+    defects = cv2.convexityDefects(max_contour, hull)
+    for i in range(defects.shape[0]):
+        s, e, f, d = defects[i][0]
+        far = tuple(max_contour[f][0])
+        cv2.circle(drawing, far, 1, [0, 0, 255], -1)
+        defects_count += 1
+    return drawing, cv2.contourArea(max_contour), defects_count, max_contour
 
 
 def init_ui():
