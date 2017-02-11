@@ -2,18 +2,7 @@ import cv2
 import numpy as np
 from images import makeDatabase, split
 import math
-
-
-def recognize(contour_area, defects_count, centroid, left, right, top):
-
-    """
-    Recognize the gesture based on diffrent parameters
-    """
-    if defects_count == 2:
-        angle = findAngle(left, top, centroid)
-        print(angle)
-        return "2"
-    return defects_count + 1
+bg_contour_area = 0
 
 
 def findAngle(start, end, far):
@@ -49,6 +38,7 @@ def printDatabase(defects_arr):
 
 
 def findmin(value, arr):
+
     """
     Returns the closest value to the letter
     """
@@ -64,8 +54,10 @@ def imageProcessing(final_img, img):
     Output : The max countour found on the image and the image of the
     contour and hull
     """
-
+    # Defaults to be Returned
     defects_count = 0
+    answer = "Waiting"
+
     image, contour, hierarchy = cv2.findContours(final_img.copy(),
                                                  cv2.RETR_TREE,
                                                  cv2.CHAIN_APPROX_NONE)
@@ -81,11 +73,17 @@ def imageProcessing(final_img, img):
     extLeft = tuple(max_contour[max_contour[:, :, 0].argmin()][0])
     extRight = tuple(max_contour[max_contour[:, :, 0].argmax()][0])
     extTop = tuple(max_contour[max_contour[:, :, 1].argmin()][0])
+    cv2.circle(img, extTop, 1, [255, 0, 0], 1)
+    cv2.circle(img, extTop, 1, [255, 0, 0], 1)
+    cv2.circle(img, extTop, 1, [255, 0, 0], 1)
 
     # find the defects
     hull = cv2.convexHull(max_contour, returnPoints=False)
     defects = cv2.convexityDefects(max_contour, hull)
+
     if defects is not None:
+
+        # count the fingers
         for i in range(defects.shape[0]):
             s, e, f, d = defects[i][0]
             start = tuple(max_contour[s][0])
@@ -95,22 +93,17 @@ def imageProcessing(final_img, img):
             if angle <= 90:
                 defects_count += 1
                 cv2.circle(img, far, 1, [255, 0, 255], 1)
-                cv2.circle(img, start, 1, [255, 0, 255], 1)
-                cv2.circle(img, end, 1, [255, 0, 255], 1)
 
-            moments = cv2.moments(max_contour)
             # Central mass of first order moments
+            moments = cv2.moments(max_contour)
             if moments['m00'] != 0:
                 cx = int(moments['m10']/moments['m00'])  # cx = M10/M00
                 cy = int(moments['m01']/moments['m00'])  # cy = M01/M00
                 centerMass = (cx, cy)
                 cv2.circle(img, centerMass, 7, [100, 0, 255], 2)
-
-    cv2.imshow("image", img)
-
-    answer = recognize(contour_area, defects_count, centerMass,
-                       extLeft, extRight, extTop)
-    return answer
+        answer = recognize(contour_area, defects_count, centerMass,
+                           extLeft, extRight, extTop)
+    return answer, contour_area
 
 
 def init_ui():
@@ -120,14 +113,15 @@ def init_ui():
     image processing funcitons are called
     """
     c_pressed = False
+    b_pressed = False
     while(cap.isOpened()):
         ret, image = cap.read()
 
         # properties of rec -> img, vertex1, 2, color, thickness
-        cv2.rectangle(image, (550, 550), (100, 100), (0, 255, 0), 1)
+        cv2.rectangle(image, (500, 500), (100, 100), (0, 255, 0), 1)
 
         # crop image
-        crop_img = image[100:550, 100:550]  # x, y, w, h
+        crop_img = image[100:500, 100:500]  # x, y, w, h
         keyPressed = cv2.waitKey(10)
 
         # convert to greyscale
@@ -142,22 +136,51 @@ def init_ui():
         thresh_img = cv2.erode(final_img, None, iterations=2)
         final_img = cv2.dilate(thresh_img, None, iterations=2)
 
-        if c_pressed:
+        if not b_pressed:
+            answer = "Press B to setup"
+            _, contour_area = imageProcessing(final_img, crop_img)
+            global bg_contour_area
+            bg_contour_area = contour_area
+
+        elif b_pressed and c_pressed:
             answer = imageProcessing(final_img, crop_img)
         else:
             answer = "Press C to capture"
 
-        cv2.putText(image, str(answer), (50, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX, 3, 255)
+        cv2.putText(image, str(answer), (70, 70),
+                    cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 255))
 
         cv2.imshow("Hand detection", image)
-
         # Keyboard handling
         if(keyPressed == 27):
             cleanup()
 
         elif(keyPressed == ord('c')):
             c_pressed = True
+
+        elif(keyPressed == ord('b')):
+            b_pressed = True
+
+
+def recognize(contour_area, defects_count, centroid, left, right, top):
+
+    """
+    Recognize the gesture based on diffrent parameters
+    """
+    if abs(contour_area - bg_contour_area) < 50:
+        return "Waiting"
+
+    if defects_count == 0:
+        if contour_area < 50000:
+            return "1"
+        return "Eggs"
+
+    elif defects_count == 2:
+        if contour_area > 55000:
+            return "Ok"
+        return "3"
+
+    return defects_count + 1
 
 
 def cleanup():
@@ -173,10 +196,14 @@ def cleanup():
 
 
 if __name__ == "__main__":
-    # dict = {}
-    # char_name, area_arr, defects_arr, length_arr, radius_arr = split()
-    # printDatabase()
-    cap = cv2.VideoCapture(0)
+
+    """
+    Main method of the program, set up the camera the backgroundsubstractor
+    and messeages to be printed
+    Call the main init_ui funntion to start the main loop
+    """
+
     fgbg = cv2.createBackgroundSubtractorMOG2()
+    cap = cv2.VideoCapture(0)
     print("Press esc to exit")
     init_ui()
